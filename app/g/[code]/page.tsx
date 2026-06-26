@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { api, getSession, rememberGroup } from "@/lib/client";
 import { formatCents, formatWhen, type BoardRow, type EntryDTO, type Member } from "@/lib/ledger";
 import { PnlChart } from "./PnlChart";
+import { PokerForm } from "./PokerForm";
 
 type GroupData = {
   group: { id: string; name: string; code: string };
@@ -13,7 +14,7 @@ type GroupData = {
   boards: { bets: BoardRow[]; overall: BoardRow[] };
 };
 
-type Tab = "ledger" | "add" | "boards" | "pnl";
+type Tab = "ledger" | "add" | "poker" | "boards" | "pnl";
 
 export default function GroupPage() {
   const router = useRouter();
@@ -99,6 +100,9 @@ export default function GroupPage() {
         <button className={tab === "add" ? "active" : ""} onClick={() => setTab("add")}>
           Add
         </button>
+        <button className={tab === "poker" ? "active" : ""} onClick={() => setTab("poker")}>
+          Poker
+        </button>
         <button className={tab === "boards" ? "active" : ""} onClick={() => setTab("boards")}>
           Leaderboards
         </button>
@@ -116,6 +120,16 @@ export default function GroupPage() {
           members={data.members}
           meId={me.id}
           onAdded={() => {
+            setTab("ledger");
+            load();
+          }}
+        />
+      )}
+      {tab === "poker" && (
+        <PokerForm
+          code={code}
+          members={data.members}
+          onResolved={() => {
             setTab("ledger");
             load();
           }}

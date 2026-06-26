@@ -14,6 +14,9 @@ loser/ower approves or disputes it; two leaderboards keep score.
 - **Transfers** (e.g. food) use the exact same approve/dispute flow.
 - **Two leaderboards**: **Bets only** and **Overall** (bets + transfers), summed
   from approved entries.
+- **Poker resolver** *(experimental)*: enter each player's buy-in and final
+  chips; once the chips balance, it computes the minimal set of loser→winner
+  payments and posts them as bets (so they flow into the Bets board + PnL).
 
 ## Stack
 

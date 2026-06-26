@@ -108,6 +108,54 @@ async function main() {
   check("overall board: Alice +1500", overall[alice] === 1500);
   check("overall board: Bob -1500", overall[bob] === -1500);
 
+  console.log("Poker");
+  // Fresh group with a third player so the settlement spans multiple payments.
+  const cara = "Cara_" + rnd();
+  const c = await call("/api/auth/signup", { method: "POST", body: { name: cara, pin: "5555" } });
+  const cTok = c.data.token, cId = c.data.user.id;
+  const pg = (await call("/api/groups", { method: "POST", body: { name: "Poker Night" }, token: aTok })).data.group;
+  await call("/api/groups/join", { method: "POST", body: { code: pg.code }, token: bTok });
+  await call("/api/groups/join", { method: "POST", body: { code: pg.code }, token: cTok });
+
+  // Unbalanced table is rejected.
+  const bad = await call(`/api/groups/${pg.code}/poker`, {
+    method: "POST", token: aTok,
+    body: { players: [
+      { id: aId, buyInCents: 1000, cashOutCents: 1000 },
+      { id: bId, buyInCents: 1000, cashOutCents: 2000 },
+    ] },
+  });
+  check("unbalanced poker rejected (400)", bad.status === 400 && bad.data.offByCents === 1000);
+
+  // Balanced: Alice +1500, Bob -500, Cara -1000  (Alice recorded it).
+  const game = await call(`/api/groups/${pg.code}/poker`, {
+    method: "POST", token: aTok,
+    body: { label: "Friday", players: [
+      { id: aId, buyInCents: 2000, cashOutCents: 3500 },
+      { id: bId, buyInCents: 2000, cashOutCents: 1500 },
+      { id: cId, buyInCents: 2000, cashOutCents: 1000 },
+    ] },
+  });
+  check("poker resolves into payments", game.status === 200 && game.data.created >= 1);
+  // Total owed to Alice across settlements should be 1500.
+  const toAlice = game.data.settlements.filter((s) => s.toId === aId).reduce((n, s) => n + s.amountCents, 0);
+  check("settlements credit Alice +1500", toAlice === 1500);
+
+  const pv = await call(`/api/groups/${pg.code}`, { token: aTok });
+  const pbets = Object.fromEntries(pv.data.boards.bets.map((r) => [r.name, r.netCents]));
+  // Bob & Cara are payers (not the creator) so their entries are PENDING -> not yet counted.
+  // Approve them to confirm the board lands on the expected nets.
+  for (const e of pv.data.entries.filter((e) => e.status === "PENDING")) {
+    const tok = e.payer.id === bId ? bTok : cTok;
+    await call(`/api/entries/${e.id}/approve`, { method: "POST", token: tok });
+  }
+  const pv2 = await call(`/api/groups/${pg.code}`, { token: aTok });
+  const pbets2 = Object.fromEntries(pv2.data.boards.bets.map((r) => [r.name, r.netCents]));
+  check("poker pending before approval", (pbets[cara] ?? 0) === 0);
+  check("poker board: Alice +1500", pbets2[alice] === 1500);
+  check("poker board: Bob -500", pbets2[bob] === -500);
+  check("poker board: Cara -1000", pbets2[cara] === -1000);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 }
