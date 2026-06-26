@@ -1,13 +1,12 @@
-// Bet-ledger data model.
-// SQLite for dev; the schema is kept Postgres-compatible so deploying is a
-// matter of swapping the datasource provider + DATABASE_URL.
+// Bet-ledger data model. Backed by PostgreSQL — point DATABASE_URL at any
+// Postgres instance (local, Neon, Supabase, Railway, …).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
