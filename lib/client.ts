@@ -47,7 +47,21 @@ export function forgetGroup(code: string) {
   localStorage.setItem(GROUPS_KEY, JSON.stringify(groups));
 }
 
-/** fetch JSON with the stored bearer token; throws Error(message) on failure. */
+/** Overwrite the cached group list (used to reconcile with the server). */
+export function saveGroups(groups: SavedGroup[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(GROUPS_KEY, JSON.stringify(groups));
+}
+
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** fetch JSON with the stored bearer token; throws ApiError(message, status). */
 export async function api<T = unknown>(
   path: string,
   opts: { method?: string; body?: unknown } = {}
@@ -62,6 +76,11 @@ export async function api<T = unknown>(
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Request failed (${res.status})`);
+  if (!res.ok) {
+    // If we sent a token and it was rejected, the stored session is stale —
+    // clear it so the UI stops showing a phantom signed-in state.
+    if (res.status === 401 && session) setSession(null);
+    throw new ApiError((data as { error?: string }).error ?? `Request failed (${res.status})`, res.status);
+  }
   return data as T;
 }

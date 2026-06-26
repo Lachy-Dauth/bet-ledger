@@ -150,6 +150,15 @@ async function main() {
   const dbets3 = Object.fromEntries(dv3.data.boards.bets.map((r) => [r.name, r.netCents]));
   check("voided entry not counted", (dbets3[dan] ?? 0) === 0);
 
+  console.log("My groups / stale session");
+  const mine = await call("/api/groups", { token: aTok });
+  check("lists my groups", mine.status === 200 && Array.isArray(mine.data.groups));
+  check("my groups include the Trio group", mine.data.groups.some((g) => g.code === dg.code));
+  const noTok = await call("/api/groups");
+  check("listing groups needs auth (401)", noTok.status === 401);
+  const staleTok = await call("/api/groups", { token: "deadbeef-not-a-real-token" });
+  check("stale token rejected (401)", staleTok.status === 401);
+
   console.log("Poker");
   // Fresh group with a third player so the settlement spans multiple payments.
   const cara = "Cara_" + rnd();

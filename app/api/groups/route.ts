@@ -3,6 +3,21 @@ import { prisma } from "@/lib/db";
 import { getUser } from "@/lib/auth";
 import { uniqueGroupCode } from "@/lib/code";
 
+// List the groups the signed-in user actually belongs to (source of truth, so
+// the client can drop stale/deleted groups it had cached).
+export async function GET(req: Request) {
+  const user = await getUser(req);
+  if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+
+  const memberships = await prisma.membership.findMany({
+    where: { userId: user.id },
+    include: { group: { select: { id: true, name: true, code: true } } },
+    orderBy: { joinedAt: "desc" },
+  });
+
+  return NextResponse.json({ groups: memberships.map((m) => m.group) });
+}
+
 // Create a group; the creator is auto-added as a member.
 export async function POST(req: Request) {
   const user = await getUser(req);

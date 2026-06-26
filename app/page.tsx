@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   api,
+  ApiError,
   getSavedGroups,
   getSession,
   rememberGroup,
+  saveGroups,
   setSession,
   type SavedGroup,
   type Session,
@@ -19,10 +21,30 @@ export default function Home() {
   const [groups, setGroups] = useState<SavedGroup[]>([]);
   const [ready, setReady] = useState(false);
 
+  // Validate the stored session against the server and refresh the group list
+  // from it (the source of truth). A 401 means the session is stale → sign out;
+  // groups that no longer exist / we've left simply drop off the list.
+  async function refresh(s: Session) {
+    try {
+      const { groups } = await api<{ groups: SavedGroup[] }>("/api/groups");
+      setGroups(groups);
+      saveGroups(groups);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        setSession(null);
+        setSess(null);
+        setGroups([]);
+      }
+      // Other errors (e.g. offline): keep the cached list and stay signed in.
+    }
+  }
+
   useEffect(() => {
-    setSess(getSession());
+    const s = getSession();
+    setSess(s);
     setGroups(getSavedGroups());
     setReady(true);
+    if (s) refresh(s);
   }, []);
 
   if (!ready) return null;
@@ -30,6 +52,7 @@ export default function Home() {
   function onSignedIn(s: Session) {
     setSession(s);
     setSess(s);
+    refresh(s);
   }
 
   function signOut() {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { api, getSession, rememberGroup, setSession, type Session } from "@/lib/client";
+import { api, ApiError, forgetGroup, getSession, rememberGroup, setSession, type Session } from "@/lib/client";
 import { formatCents, formatWhen, type BoardRow, type EntryDTO, type Member } from "@/lib/ledger";
 import { AuthForm } from "../../AuthForm";
 import { PnlChart } from "./PnlChart";
@@ -28,6 +28,20 @@ export default function GroupPage() {
   const [ready, setReady] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Turn an API failure into the right UI: a stale session (401) drops us to the
+  // sign-in form; a missing group (404) is forgotten so it stops haunting lists.
+  const handleError = useCallback(
+    (e: unknown) => {
+      if (e instanceof ApiError && e.status === 401) {
+        setMe(null);
+        return;
+      }
+      if (e instanceof ApiError && e.status === 404) forgetGroup(code);
+      setErr((e as Error).message);
+    },
+    [code]
+  );
+
   // Just reload the group (membership already established).
   const load = useCallback(async () => {
     try {
@@ -36,9 +50,9 @@ export default function GroupPage() {
       rememberGroup({ code: d.group.code, name: d.group.name });
       setErr("");
     } catch (e) {
-      setErr((e as Error).message);
+      handleError(e);
     }
-  }, [code]);
+  }, [code, handleError]);
 
   // The share link IS the invite: joining is idempotent, so for any signed-in
   // visitor we join (a no-op if already a member) then load the group.
@@ -47,9 +61,9 @@ export default function GroupPage() {
       await api("/api/groups/join", { method: "POST", body: { code } });
       await load();
     } catch (e) {
-      setErr((e as Error).message);
+      handleError(e);
     }
-  }, [code, load]);
+  }, [code, load, handleError]);
 
   useEffect(() => {
     const s = getSession();
