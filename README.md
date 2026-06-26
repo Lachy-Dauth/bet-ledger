@@ -25,27 +25,11 @@ counts immediately unless someone disputes it; two leaderboards keep score.
 ## Stack
 
 - Next.js (App Router, TypeScript) — UI + API routes in one app.
-- Prisma + **PostgreSQL**. Point `DATABASE_URL` at any Postgres instance
-  (local, Neon, Supabase, Railway, …).
+- Prisma + SQLite for dev. To deploy, point `DATABASE_URL` at Postgres and set
+  the datasource `provider = "postgresql"` in `prisma/schema.prisma`.
 - PINs hashed with bcrypt; session token kept in `localStorage`.
 
 ## Run locally
-
-You need a Postgres database. Set `DATABASE_URL` in `.env`, e.g.:
-
-```
-DATABASE_URL="postgresql://postgres@127.0.0.1:5432/betledger?schema=public"
-```
-
-A quick local Postgres with Docker:
-
-```bash
-docker run --name bet-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=betledger \
-  -p 5432:5432 -d postgres:16
-# then set DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/betledger?schema=public"
-```
-
-Then:
 
 ```bash
 npm install
@@ -53,15 +37,15 @@ npm run dev    # http://localhost:3000
 ```
 
 `npm run dev` and `npm start` run `prisma migrate deploy` first (via the
-`predev` / `prestart` hooks), so the schema is applied to the database
+`predev` / `prestart` hooks), so the SQLite schema is created/applied
 automatically before the server boots — no manual migrate step needed.
 
 ### Deploying
 
-Point `DATABASE_URL` at your hosted Postgres. `npm start` applies migrations on
-boot. If your platform prunes devDependencies in production, run
-`npx prisma migrate deploy` in your release/start command instead (the `prisma`
-CLI must be available).
+Point `DATABASE_URL` at your persistent database (a SQLite file on a mounted
+volume, or a Postgres URL). `npm start` applies migrations on boot. If your
+platform prunes devDependencies in production, run `npx prisma migrate deploy`
+in your release/start command instead (the `prisma` CLI must be available).
 
 ## Smoke test
 
