@@ -1,0 +1,12 @@
+# Railway deploy config. NOTE: the persistent Volume itself must be created in
+# the Railway dashboard (Service → Settings → Volumes) — it can't be declared
+# here. Mount it at any path; the start script reads RAILWAY_VOLUME_MOUNT_PATH
+# and stores the SQLite DB there so data survives redeploys.
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
