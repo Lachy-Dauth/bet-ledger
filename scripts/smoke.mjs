@@ -36,12 +36,18 @@ async function main() {
   const bob = "Bob_" + rnd();
 
   console.log("Auth");
-  const a = await call("/api/auth/login", { method: "POST", body: { name: alice, pin: "1234" } });
+  const a = await call("/api/auth/signup", { method: "POST", body: { name: alice, pin: "1234" } });
   check("Alice signs up", a.status === 200 && a.data.token);
-  const b = await call("/api/auth/login", { method: "POST", body: { name: bob, pin: "9999" } });
+  const b = await call("/api/auth/signup", { method: "POST", body: { name: bob, pin: "9999" } });
   check("Bob signs up", b.status === 200 && b.data.token);
+  const dup = await call("/api/auth/signup", { method: "POST", body: { name: alice, pin: "1234" } });
+  check("duplicate signup rejected (409)", dup.status === 409);
+  const unknown = await call("/api/auth/login", { method: "POST", body: { name: "Ghost_" + rnd(), pin: "1234" } });
+  check("login unknown name rejected (401)", unknown.status === 401);
   const badPin = await call("/api/auth/login", { method: "POST", body: { name: alice, pin: "0000" } });
-  check("wrong PIN rejected", badPin.status === 401);
+  check("login wrong PIN rejected (401)", badPin.status === 401);
+  const relogin = await call("/api/auth/login", { method: "POST", body: { name: alice, pin: "1234" } });
+  check("login correct PIN works", relogin.status === 200 && relogin.data.token);
 
   const aTok = a.data.token;
   const bTok = b.data.token;

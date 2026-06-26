@@ -84,17 +84,24 @@ export default function Home() {
 }
 
 function SignInForm({ onSignedIn }: { onSignedIn: (s: Session) => void }) {
+  const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+
+  function switchMode(next: "login" | "signup") {
+    setMode(next);
+    setErr("");
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
     setBusy(true);
     try {
-      const s = await api<Session>("/api/auth/login", { method: "POST", body: { name, pin } });
+      const path = mode === "login" ? "/api/auth/login" : "/api/auth/signup";
+      const s = await api<Session>(path, { method: "POST", body: { name, pin } });
       onSignedIn(s);
     } catch (e) {
       setErr((e as Error).message);
@@ -105,8 +112,19 @@ function SignInForm({ onSignedIn }: { onSignedIn: (s: Session) => void }) {
 
   return (
     <form className="panel" onSubmit={submit}>
-      <h2>Sign in</h2>
-      <p className="muted">New name? An account is created. Existing name? Enter your PIN.</p>
+      <div className="tabs">
+        <button type="button" className={mode === "login" ? "active" : ""} onClick={() => switchMode("login")}>
+          Log in
+        </button>
+        <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => switchMode("signup")}>
+          Sign up
+        </button>
+      </div>
+      <p className="muted">
+        {mode === "login"
+          ? "Welcome back — enter your name and PIN."
+          : "New here? Pick a name and a PIN to create your account."}
+      </p>
       <label>Name</label>
       <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Alice" autoComplete="off" />
       <label>PIN (4–8 digits)</label>
@@ -119,7 +137,7 @@ function SignInForm({ onSignedIn }: { onSignedIn: (s: Session) => void }) {
       />
       {err && <div className="error">{err}</div>}
       <div style={{ marginTop: 14 }}>
-        <button disabled={busy}>{busy ? "…" : "Continue"}</button>
+        <button disabled={busy}>{busy ? "…" : mode === "login" ? "Log in" : "Create account"}</button>
       </div>
     </form>
   );

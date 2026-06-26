@@ -7,6 +7,13 @@ export function newToken(): string {
   return randomBytes(24).toString("hex");
 }
 
+/** Create a session row for a user and return its token. */
+export async function createSession(userId: string): Promise<string> {
+  const token = newToken();
+  await prisma.session.create({ data: { token, userId } });
+  return token;
+}
+
 /** Resolve a bearer token from a request to a user, or null. */
 export async function getUser(req: Request): Promise<AuthedUser | null> {
   const header = req.headers.get("authorization") ?? "";

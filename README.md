@@ -26,9 +26,19 @@ loser/ower approves or disputes it; two leaderboards keep score.
 
 ```bash
 npm install
-npx prisma migrate dev --name init   # creates prisma/dev.db
-npm run dev                           # http://localhost:3000
+npm run dev    # http://localhost:3000
 ```
+
+`npm run dev` and `npm start` run `prisma migrate deploy` first (via the
+`predev` / `prestart` hooks), so the SQLite schema is created/applied
+automatically before the server boots — no manual migrate step needed.
+
+### Deploying
+
+Point `DATABASE_URL` at your persistent database (a SQLite file on a mounted
+volume, or a Postgres URL). `npm start` applies migrations on boot. If your
+platform prunes devDependencies in production, run `npx prisma migrate deploy`
+in your release/start command instead (the `prisma` CLI must be available).
 
 ## Smoke test
 
