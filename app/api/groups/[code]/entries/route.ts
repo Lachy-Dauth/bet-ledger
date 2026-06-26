@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getUser, requireMembership } from "@/lib/auth";
-import { approvalsNeeded } from "@/lib/ledger";
 
 // Record a bet or transfer. payer = loser/ower, payee = winner/owed.
-// Creating it counts as the creator's approval; it then resolves once the
-// group quorum (approvalsNeeded) of members have approved.
+// Entries are APPROVED on creation and count immediately; a party can dispute.
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const user = await getUser(req);
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
@@ -37,11 +35,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
     return NextResponse.json({ error: "payer and payee must both be group members" }, { status: 400 });
   }
 
-  // Creating an entry counts as the creator's approval. It resolves right away
-  // only if the group's quorum is a single approval (a 2-person group).
-  const memberCount = await prisma.membership.count({ where: { groupId: group.id } });
-  const needed = approvalsNeeded(memberCount);
-  const resolved = needed <= 1;
   const entry = await prisma.entry.create({
     data: {
       groupId: group.id,
@@ -51,9 +44,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
       payeeId,
       amountCents,
       description,
-      status: resolved ? "APPROVED" : "PENDING",
-      resolvedAt: resolved ? new Date() : null,
-      approvals: { create: { userId: user.id } },
+      status: "APPROVED",
+      resolvedAt: new Date(),
     },
   });
 

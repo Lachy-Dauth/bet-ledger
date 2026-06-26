@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getUser, requireMembership } from "@/lib/auth";
-import { approvalsNeeded } from "@/lib/ledger";
 import { balanceCents, computeSettlements, type PokerPlayer } from "@/lib/poker";
 
 // Resolve a poker game: take each player's buy-in + cash-out, verify the table
@@ -66,11 +65,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
       return NextResponse.json({ error: "Nobody won or lost — nothing to settle" }, { status: 400 });
     }
 
-    // Recording the game counts as the creator's approval on each payment; a
-    // payment resolves once the group quorum (approvalsNeeded) approves it.
-    const groupMemberCount = await prisma.membership.count({ where: { groupId: group.id } });
-    const needed = approvalsNeeded(groupMemberCount);
-    const resolved = needed <= 1;
+    // Payments post as approved bets immediately; any party can dispute one.
     const description = label ? `Poker · ${label}` : "Poker game";
     const now = new Date();
     const created = await prisma.$transaction(
@@ -84,15 +79,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
             payeeId: s.toId,
             amountCents: s.amountCents,
             description,
-            status: resolved ? "APPROVED" : "PENDING",
-            resolvedAt: resolved ? now : null,
-            approvals: { create: { userId: user.id } },
+            status: "APPROVED",
+            resolvedAt: now,
           },
         })
       )
     );
 
-    return NextResponse.json({ created: created.length, needed, settlements });
+    return NextResponse.json({ created: created.length, settlements });
   } catch (e) {
     console.error("POST /api/groups/[code]/poker failed:", e);
     return NextResponse.json({ error: "Server error resolving the poker game" }, { status: 500 });

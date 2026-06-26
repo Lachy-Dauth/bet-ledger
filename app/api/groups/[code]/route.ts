@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getUser, requireMembership } from "@/lib/auth";
-import { approvalsNeeded, computeBoard, type EntryDTO, type Member } from "@/lib/ledger";
+import { computeBoard, type EntryDTO, type Member } from "@/lib/ledger";
 
 type EntryWithUsers = {
   id: string;
@@ -14,10 +14,9 @@ type EntryWithUsers = {
   createdBy: { id: string; name: string };
   payer: { id: string; name: string };
   payee: { id: string; name: string };
-  approvals: { userId: string }[];
 };
 
-function toDTO(e: EntryWithUsers, meId: string): EntryDTO {
+function toDTO(e: EntryWithUsers): EntryDTO {
   return {
     id: e.id,
     type: e.type as EntryDTO["type"],
@@ -29,8 +28,6 @@ function toDTO(e: EntryWithUsers, meId: string): EntryDTO {
     createdBy: e.createdBy,
     payer: e.payer,
     payee: e.payee,
-    approvalCount: e.approvals.length,
-    approvedByMe: e.approvals.some((a) => a.userId === meId),
   };
 }
 
@@ -57,16 +54,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
       createdBy: { select: { id: true, name: true } },
       payer: { select: { id: true, name: true } },
       payee: { select: { id: true, name: true } },
-      approvals: { select: { userId: true } },
     },
   });
-  const entries = rawEntries.map((e) => toDTO(e, user.id));
+  const entries = rawEntries.map((e) => toDTO(e));
 
   return NextResponse.json({
-    group: { id: group.id, name: group.name, code: group.code },
+    group: { id: group.id, name: group.name, code: group.code, createdById: group.createdById },
     members,
     entries,
-    approvalsNeeded: approvalsNeeded(members.length),
     boards: {
       bets: computeBoard(members, entries, true),
       overall: computeBoard(members, entries, false),

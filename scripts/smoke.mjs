@@ -65,29 +65,27 @@ async function main() {
   const noMember = await call(`/api/groups/${code}`, { token: undefined });
   check("unauth read rejected", noMember.status === 401);
 
-  console.log("Entries (2-person group: quorum = 1, resolves on creation)");
-  // In a 2-person group the quorum is a single approval, so creating an entry
-  // (which counts as the creator's approval) resolves it immediately.
+  console.log("Entries (approved by default)");
   const bet1 = await call(`/api/groups/${code}/entries`, {
     method: "POST",
     token: aTok,
     body: { type: "BET", payerId: aId, payeeId: bId, amountCents: 1000, description: "lost a wager" },
   });
-  check("own-loss bet resolves on creation", bet1.data.status === "APPROVED");
+  check("bet is approved on creation", bet1.data.status === "APPROVED");
 
   const bet2 = await call(`/api/groups/${code}/entries`, {
     method: "POST",
     token: aTok,
     body: { type: "BET", payerId: bId, payeeId: aId, amountCents: 500 },
   });
-  check("bet for other resolves on creation (quorum 1)", bet2.data.status === "APPROVED");
+  check("bet for other is approved on creation", bet2.data.status === "APPROVED");
 
   const tr = await call(`/api/groups/${code}/entries`, {
     method: "POST",
     token: aTok,
     body: { type: "TRANSFER", payerId: bId, payeeId: aId, amountCents: 2000, description: "pizza" },
   });
-  check("transfer resolves on creation (quorum 1)", tr.data.status === "APPROVED");
+  check("transfer is approved on creation", tr.data.status === "APPROVED");
 
   console.log("Leaderboards");
   const view = await call(`/api/groups/${code}`, { token: aTok });
@@ -100,45 +98,57 @@ async function main() {
   check("overall board: Alice +1500", overall[alice] === 1500);
   check("overall board: Bob -1500", overall[bob] === -1500);
 
-  console.log("Quorum (3-person group: quorum = 2)");
+  console.log("Dispute / resolve (group creator resolves)");
   const dan = "Dan_" + rnd();
   const d = await call("/api/auth/signup", { method: "POST", body: { name: dan, pin: "2222" } });
-  const dTok = d.data.token;
-  const qg = (await call("/api/groups", { method: "POST", body: { name: "Trio" }, token: aTok })).data.group;
-  await call("/api/groups/join", { method: "POST", body: { code: qg.code }, token: bTok });
-  // Cara joins below via her own token; create her first.
-  const caraQ = "CaraQ_" + rnd();
-  const cq = await call("/api/auth/signup", { method: "POST", body: { name: caraQ, pin: "3333" } });
-  const cqTok = cq.data.token, cqId = cq.data.user.id;
-  await call("/api/groups/join", { method: "POST", body: { code: qg.code }, token: cqTok });
-  const view2 = await call(`/api/groups/${qg.code}`, { token: aTok });
-  check("approvalsNeeded is 2 for 3 members", view2.data.approvalsNeeded === 2);
+  const dTok = d.data.token, dId = d.data.user.id;
+  // Alice creates the group, so Alice is the resolver. Bob & Dan join.
+  const dg = (await call("/api/groups", { method: "POST", body: { name: "Trio" }, token: aTok })).data.group;
+  await call("/api/groups/join", { method: "POST", body: { code: dg.code }, token: bTok });
+  await call("/api/groups/join", { method: "POST", body: { code: dg.code }, token: dTok });
 
-  // Alice records a bet Bob loses -> creator's vote = 1/2 -> PENDING.
-  const qb = await call(`/api/groups/${qg.code}/entries`, {
+  // Bob loses $700 to Dan -> approved immediately and counts.
+  const db = await call(`/api/groups/${dg.code}/entries`, {
     method: "POST", token: aTok,
-    body: { type: "BET", payerId: bId, payeeId: aId, amountCents: 700 },
+    body: { type: "BET", payerId: bId, payeeId: dId, amountCents: 700 },
   });
-  check("bet pending at 1/2 in trio", qb.data.status === "PENDING");
+  check("new entry counts right away", db.data.status === "APPROVED");
 
-  // A non-member cannot approve.
-  const outsider = await call(`/api/entries/${qb.data.id}/approve`, { method: "POST", token: dTok });
-  check("non-member cannot approve (403)", outsider.status === 403);
+  // A non-party cannot dispute; the payer (Bob) can.
+  const badDisp = await call(`/api/entries/${db.data.id}/dispute`, { method: "POST", token: aTok });
+  check("non-party cannot dispute (403)", badDisp.status === 403);
+  const disp = await call(`/api/entries/${db.data.id}/dispute`, { method: "POST", token: bTok });
+  check("party can dispute", disp.status === 200 && disp.data.status === "DISPUTED");
 
-  // Cara (not a party) approving reaches the quorum -> APPROVED.
-  const q2 = await call(`/api/entries/${qb.data.id}/approve`, { method: "POST", token: cqTok });
-  check("second member approval resolves it", q2.status === 200 && q2.data.status === "APPROVED");
+  // Disputed entry drops off the board.
+  const dv = await call(`/api/groups/${dg.code}`, { token: aTok });
+  const dbets = Object.fromEntries(dv.data.boards.bets.map((r) => [r.name, r.netCents]));
+  check("disputed entry not counted", (dbets[dan] ?? 0) === 0);
 
-  // Dispute path: Alice records a bet Cara loses; Cara (payer) disputes it.
-  const qd = await call(`/api/groups/${qg.code}/entries`, {
-    method: "POST", token: aTok,
-    body: { type: "BET", payerId: cqId, payeeId: aId, amountCents: 400 },
+  // Only the group creator resolves; a party cannot.
+  const badResolve = await call(`/api/entries/${db.data.id}/resolve`, {
+    method: "POST", token: bTok, body: { outcome: "void" },
   });
-  const disp = await call(`/api/entries/${qd.data.id}/dispute`, { method: "POST", token: cqTok });
-  check("payer can dispute", disp.status === 200);
-  const view3 = await call(`/api/groups/${qg.code}`, { token: aTok });
-  const disputed = view3.data.entries.find((e) => e.id === qd.data.id);
-  check("disputed entry not counted on board", disputed.status === "DISPUTED");
+  check("non-creator cannot resolve (403)", badResolve.status === 403);
+
+  // Alice (creator) upholds it -> counts again.
+  const upheld = await call(`/api/entries/${db.data.id}/resolve`, {
+    method: "POST", token: aTok, body: { outcome: "uphold" },
+  });
+  check("creator upholds dispute", upheld.status === 200 && upheld.data.status === "APPROVED");
+  const dv2 = await call(`/api/groups/${dg.code}`, { token: aTok });
+  const dbets2 = Object.fromEntries(dv2.data.boards.bets.map((r) => [r.name, r.netCents]));
+  check("upheld entry counts again", dbets2[dan] === 700);
+
+  // Dispute again and void it -> never counts.
+  await call(`/api/entries/${db.data.id}/dispute`, { method: "POST", token: bTok });
+  const voided = await call(`/api/entries/${db.data.id}/resolve`, {
+    method: "POST", token: aTok, body: { outcome: "void" },
+  });
+  check("creator voids dispute", voided.status === 200 && voided.data.status === "VOIDED");
+  const dv3 = await call(`/api/groups/${dg.code}`, { token: aTok });
+  const dbets3 = Object.fromEntries(dv3.data.boards.bets.map((r) => [r.name, r.netCents]));
+  check("voided entry not counted", (dbets3[dan] ?? 0) === 0);
 
   console.log("Poker");
   // Fresh group with a third player so the settlement spans multiple payments.
@@ -173,20 +183,12 @@ async function main() {
   const toAlice = game.data.settlements.filter((s) => s.toId === aId).reduce((n, s) => n + s.amountCents, 0);
   check("settlements credit Alice +1500", toAlice === 1500);
 
+  // Poker entries are approved by default, so the board reflects them right away.
   const pv = await call(`/api/groups/${pg.code}`, { token: aTok });
   const pbets = Object.fromEntries(pv.data.boards.bets.map((r) => [r.name, r.netCents]));
-  // Bob & Cara are payers (not the creator) so their entries are PENDING -> not yet counted.
-  // Approve them to confirm the board lands on the expected nets.
-  for (const e of pv.data.entries.filter((e) => e.status === "PENDING")) {
-    const tok = e.payer.id === bId ? bTok : cTok;
-    await call(`/api/entries/${e.id}/approve`, { method: "POST", token: tok });
-  }
-  const pv2 = await call(`/api/groups/${pg.code}`, { token: aTok });
-  const pbets2 = Object.fromEntries(pv2.data.boards.bets.map((r) => [r.name, r.netCents]));
-  check("poker pending before approval", (pbets[cara] ?? 0) === 0);
-  check("poker board: Alice +1500", pbets2[alice] === 1500);
-  check("poker board: Bob -500", pbets2[bob] === -500);
-  check("poker board: Cara -1000", pbets2[cara] === -1000);
+  check("poker board: Alice +1500", pbets[alice] === 1500);
+  check("poker board: Bob -500", pbets[bob] === -500);
+  check("poker board: Cara -1000", pbets[cara] === -1000);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

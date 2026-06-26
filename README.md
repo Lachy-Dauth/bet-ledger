@@ -2,18 +2,20 @@
 
 A private, shareable ledger for friend groups to track **bets** and informal
 **transfers** (e.g. splitting food). Anyone in a group can record an entry; it
-resolves once a quorum of members approve it; two leaderboards keep score.
+counts immediately unless someone disputes it; two leaderboards keep score.
 
 ## Features
 
 - **Name + PIN identity**, reused across groups and remembered on your device so
   you don't sign in again.
 - **Create a group**, share it with a **6-letter code** or its URL; others join.
-- **Bets** (head-to-head: winner vs loser, fixed amount). An entry **resolves
-  once a quorum of members approve** it — the lower of 2 and half the players
-  (so a 2-person group needs 1 approval, any larger group needs 2). Recording an
-  entry counts as your approval; the payer can still **dispute** it.
-- **Transfers** (e.g. food) use the exact same approval flow.
+- **Bets** (head-to-head: winner vs loser, fixed amount). Entries are
+  **approved by default** and count right away. Either player can **dispute**
+  one, which stops it counting; the **group creator resolves** the dispute by
+  **upholding** (it counts again) or **voiding** it (it never counts).
+- **Transfers** (e.g. food) use the exact same flow.
+- **Join by link**: opening a group's share URL adds you to it — logging in or
+  signing up first if needed.
 - **Two leaderboards**: **Bets only** and **Overall** (bets + transfers), summed
   from approved entries.
 - **Poker resolver** *(experimental)*: enter each player's buy-in and final
@@ -53,8 +55,8 @@ With the dev server running:
 npm run smoke
 ```
 
-This exercises sign-in → create group → join → bet (auto-approve) → bet
-(approve) → transfer, and checks both leaderboards.
+This exercises sign-in → create group → join → bets/transfers (approved by
+default) → dispute → creator uphold/void → poker, and checks both leaderboards.
 
 ## How it works
 

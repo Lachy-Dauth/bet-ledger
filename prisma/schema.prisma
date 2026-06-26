@@ -23,7 +23,6 @@ model User {
   createdEntries Entry[]      @relation("EntryCreator")
   entriesAsPayer Entry[]      @relation("EntryPayer")
   entriesAsPayee Entry[]      @relation("EntryPayee")
-  approvals      Approval[]
 }
 
 model Session {
@@ -62,6 +61,8 @@ model Membership {
 
 // A single Entry models both a BET (winner vs loser) and a TRANSFER (e.g. food).
 // payer = the one who owes (loser); payee = the one owed (winner).
+// Entries are APPROVED by default and count immediately. A party can DISPUTE
+// one; the group creator then resolves it back to APPROVED or to VOIDED.
 model Entry {
   id          String   @id @default(cuid())
   groupId     String
@@ -71,30 +72,14 @@ model Entry {
   payeeId     String
   amountCents Int
   description String   @default("")
-  status      String   @default("PENDING") // "PENDING" | "APPROVED" | "DISPUTED"
+  status      String   @default("APPROVED") // "APPROVED" | "DISPUTED" | "VOIDED"
   createdAt   DateTime @default(now())
   resolvedAt  DateTime?
 
-  group     Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdBy User       @relation("EntryCreator", fields: [createdById], references: [id])
-  payer     User       @relation("EntryPayer", fields: [payerId], references: [id])
-  payee     User       @relation("EntryPayee", fields: [payeeId], references: [id])
-  approvals Approval[]
+  group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy User  @relation("EntryCreator", fields: [createdById], references: [id])
+  payer     User  @relation("EntryPayer", fields: [payerId], references: [id])
+  payee     User  @relation("EntryPayee", fields: [payeeId], references: [id])
 
   @@index([groupId])
-}
-
-// A member's vote that an entry is valid. An entry resolves to APPROVED once
-// enough distinct members approve (see approvalsNeeded in lib/ledger.ts).
-model Approval {
-  id        String   @id @default(cuid())
-  entryId   String
-  userId    String
-  createdAt DateTime @default(now())
-
-  entry Entry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([entryId, userId])
-  @@index([entryId])
 }

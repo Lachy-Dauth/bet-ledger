@@ -173,8 +173,8 @@ export function PokerForm({
             </div>
           ))}
           <p className="muted" style={{ marginTop: 8 }}>
-            {settlements.length} payment{settlements.length === 1 ? "" : "s"} will be posted as bets. You approve
-            them by recording the game; each resolves once enough players approve.
+            {settlements.length} payment{settlements.length === 1 ? "" : "s"} will be posted as approved bets.
+            Anyone involved can dispute one, and the group creator resolves disputes.
           </p>
         </div>
       )}

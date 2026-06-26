@@ -1,24 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { api, getSession, rememberGroup } from "@/lib/client";
+import { useParams } from "next/navigation";
+import { api, getSession, rememberGroup, setSession, type Session } from "@/lib/client";
 import { formatCents, formatWhen, type BoardRow, type EntryDTO, type Member } from "@/lib/ledger";
+import { AuthForm } from "../../AuthForm";
 import { PnlChart } from "./PnlChart";
 import { PokerForm } from "./PokerForm";
 
 type GroupData = {
-  group: { id: string; name: string; code: string };
+  group: { id: string; name: string; code: string; createdById: string };
   members: Member[];
   entries: EntryDTO[];
-  approvalsNeeded: number;
   boards: { bets: BoardRow[]; overall: BoardRow[] };
 };
 
 type Tab = "ledger" | "add" | "poker" | "boards" | "pnl";
 
 export default function GroupPage() {
-  const router = useRouter();
   const params = useParams<{ code: string }>();
   const code = (params.code || "").toUpperCase();
 
@@ -26,8 +25,10 @@ export default function GroupPage() {
   const [data, setData] = useState<GroupData | null>(null);
   const [tab, setTab] = useState<Tab>("ledger");
   const [err, setErr] = useState("");
+  const [ready, setReady] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Just reload the group (membership already established).
   const load = useCallback(async () => {
     try {
       const d = await api<GroupData>(`/api/groups/${code}`);
@@ -39,17 +40,50 @@ export default function GroupPage() {
     }
   }, [code]);
 
+  // The share link IS the invite: joining is idempotent, so for any signed-in
+  // visitor we join (a no-op if already a member) then load the group.
+  const joinAndLoad = useCallback(async () => {
+    try {
+      await api("/api/groups/join", { method: "POST", body: { code } });
+      await load();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }, [code, load]);
+
   useEffect(() => {
     const s = getSession();
-    if (!s) {
-      router.replace("/");
-      return;
+    if (s) {
+      setMe(s.user);
+      joinAndLoad();
     }
-    setMe(s.user);
-    load();
-  }, [load, router]);
+    setReady(true);
+  }, [joinAndLoad]);
 
-  if (!me) return null;
+  function onSignedIn(s: Session) {
+    setSession(s);
+    setMe(s.user);
+    joinAndLoad();
+  }
+
+  if (!ready) return null;
+
+  // Not signed in: let them log in or sign up right here, then auto-join.
+  if (!me) {
+    return (
+      <>
+        <h1>🎲 Bet Ledger</h1>
+        <p className="muted">
+          You&apos;ve been invited to group <span className="code-pill">{code}</span>. Log in or sign up to join.
+        </p>
+        <AuthForm onSignedIn={onSignedIn} subtitle={`Sign in to join group ${code}.`} />
+        <p className="muted">
+          <a href="/">← Home</a>
+        </p>
+      </>
+    );
+  }
+
   if (err && !data) {
     return (
       <>
@@ -58,7 +92,7 @@ export default function GroupPage() {
       </>
     );
   }
-  if (!data) return <p className="muted">Loading…</p>;
+  if (!data) return <p className="muted">Joining…</p>;
 
   function copyLink() {
     const url = `${window.location.origin}/g/${code}`;
@@ -153,9 +187,9 @@ function Ledger({
   onChange: () => void;
   setErr: (s: string) => void;
 }) {
-  async function resolve(id: string, action: "approve" | "dispute") {
+  async function act(id: string, path: string, body?: unknown) {
     try {
-      await api(`/api/entries/${id}/${action}`, { method: "POST" });
+      await api(`/api/entries/${id}/${path}`, { method: "POST", body });
       onChange();
     } catch (e) {
       setErr((e as Error).message);
@@ -166,14 +200,16 @@ function Ledger({
     return <div className="panel muted">No entries yet. Add a bet or transfer.</div>;
   }
 
-  const needed = data.approvalsNeeded;
+  const amOwner = meId === data.group.createdById;
+  const ownerName = data.members.find((m) => m.id === data.group.createdById)?.name ?? "the group creator";
 
   return (
     <div className="panel">
       {data.entries.map((e) => {
-        const isPending = e.status === "PENDING";
-        const canApprove = isPending && !e.approvedByMe;
-        const canDispute = isPending && e.payer.id === meId;
+        const amParty = e.payer.id === meId || e.payee.id === meId;
+        const isApproved = e.status === "APPROVED";
+        const isDisputed = e.status === "DISPUTED";
+        const isVoided = e.status === "VOIDED";
         return (
           <div key={e.id} className="entry">
             <div className="line">
@@ -181,28 +217,35 @@ function Ledger({
                 <span className="badge type">{e.type}</span>{" "}
                 <strong>{e.payer.name}</strong> {e.type === "BET" ? "loses to" : "owes"}{" "}
                 <strong>{e.payee.name}</strong>{" "}
-                <span className={e.status === "APPROVED" ? "pos" : ""}>{formatCents(e.amountCents)}</span>
+                <span
+                  className={isApproved ? "pos" : ""}
+                  style={isVoided ? { textDecoration: "line-through", opacity: 0.6 } : undefined}
+                >
+                  {formatCents(e.amountCents)}
+                </span>
               </div>
               <span className={`badge ${e.status}`}>{e.status}</span>
             </div>
             {e.description && <div className="desc">“{e.description}”</div>}
             <div className="desc">
               {formatWhen(e.createdAt)} · added by {e.createdBy.name}
-              {isPending && ` · ${e.approvalCount}/${needed} approved`}
+              {isDisputed && !amOwner && ` · awaiting ${ownerName} to resolve`}
             </div>
-            {isPending && (canApprove || canDispute || e.approvedByMe) && (
+            {isApproved && amParty && (
               <div className="actions">
-                {canApprove && (
-                  <button className="green small" onClick={() => resolve(e.id, "approve")}>
-                    Approve
-                  </button>
-                )}
-                {e.approvedByMe && <span className="muted">You approved ✓</span>}
-                {canDispute && (
-                  <button className="red small" onClick={() => resolve(e.id, "dispute")}>
-                    Dispute
-                  </button>
-                )}
+                <button className="red small" onClick={() => act(e.id, "dispute")}>
+                  Dispute
+                </button>
+              </div>
+            )}
+            {isDisputed && amOwner && (
+              <div className="actions">
+                <button className="green small" onClick={() => act(e.id, "resolve", { outcome: "uphold" })}>
+                  Uphold
+                </button>
+                <button className="red small" onClick={() => act(e.id, "resolve", { outcome: "void" })}>
+                  Void
+                </button>
               </div>
             )}
           </div>
@@ -316,9 +359,8 @@ function AddForm({
       <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="What was it for?" />
 
       <p className="muted" style={{ marginTop: 10 }}>
-        {loserId === meId
-          ? "You're the payer, so this is approved immediately."
-          : `${members.find((m) => m.id === loserId)?.name ?? "The payer"} will need to approve or dispute it.`}
+        Posts immediately and counts on the board. Either player can dispute it; the group creator
+        resolves any disputes.
       </p>
 
       {err && <div className="error">{err}</div>}

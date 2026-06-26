@@ -5,7 +5,7 @@ export type Member = { id: string; name: string };
 export type EntryDTO = {
   id: string;
   type: "BET" | "TRANSFER";
-  status: "PENDING" | "APPROVED" | "DISPUTED";
+  status: "APPROVED" | "DISPUTED" | "VOIDED";
   amountCents: number;
   description: string;
   createdAt: string;
@@ -13,18 +13,7 @@ export type EntryDTO = {
   createdBy: Member;
   payer: Member; // owes / loser
   payee: Member; // owed / winner
-  approvalCount: number; // distinct members who have approved
-  approvedByMe: boolean; // whether the requesting user has approved
 };
-
-/**
- * How many distinct member approvals resolve an entry:
- * the lower of 2 and half the players (rounded up), at least 1.
- * So a 2-player group needs 1, and any larger group needs 2.
- */
-export function approvalsNeeded(memberCount: number): number {
-  return Math.max(1, Math.min(2, Math.ceil(memberCount / 2)));
-}
 
 export type BoardRow = { id: string; name: string; netCents: number };
 

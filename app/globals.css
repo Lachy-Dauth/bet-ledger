@@ -187,6 +187,10 @@ th.num {
   background: rgba(239, 95, 107, 0.16);
   color: var(--red);
 }
+.badge.VOIDED {
+  background: rgba(154, 163, 178, 0.16);
+  color: var(--muted);
+}
 .badge.type {
   background: var(--panel-2);
   color: var(--muted);
