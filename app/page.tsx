@@ -152,7 +152,7 @@ function GroupActions({ onJoined }: { onJoined: (g: SavedGroup) => void }) {
       <h2>Start or join a group</h2>
       <form onSubmit={create}>
         <label>Create a new group</label>
-        <div className="row tight">
+        <div className="row tight stack">
           <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Group name" />
           <button style={{ flex: "none" }} disabled={busy || !newName.trim()}>
             Create
@@ -161,7 +161,7 @@ function GroupActions({ onJoined }: { onJoined: (g: SavedGroup) => void }) {
       </form>
       <form onSubmit={join}>
         <label>Join with a 6-letter code</label>
-        <div className="row tight">
+        <div className="row tight stack">
           <input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}

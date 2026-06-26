@@ -99,58 +99,48 @@ export function PokerForm({
       <label>Game label (optional)</label>
       <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Friday night" />
 
-      <table style={{ marginTop: 12 }}>
-        <thead>
-          <tr>
-            <th>In?</th>
-            <th>Player</th>
-            <th className="num">Buy-in $</th>
-            <th className="num">Cash-out $</th>
-            <th className="num">Net</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const net = toCents(r.cashOut) - toCents(r.buyIn);
-            return (
-              <tr key={r.id} style={{ opacity: r.included ? 1 : 0.4 }}>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={r.included}
-                    onChange={(e) => update(r.id, { included: e.target.checked })}
-                    style={{ width: "auto" }}
-                  />
-                </td>
-                <td>{r.name}</td>
-                <td className="num">
+      <div style={{ marginTop: 12 }}>
+        {rows.map((r) => {
+          const net = toCents(r.cashOut) - toCents(r.buyIn);
+          return (
+            <div key={r.id} className={`pk-row${r.included ? "" : " out"}`}>
+              <label className="pk-head">
+                <input
+                  type="checkbox"
+                  checked={r.included}
+                  onChange={(e) => update(r.id, { included: e.target.checked })}
+                />
+                {r.name}
+                <span className={`pk-net ${r.included && net > 0 ? "pos" : r.included && net < 0 ? "neg" : "muted"}`}>
+                  {r.included ? formatCents(net) : "—"}
+                </span>
+              </label>
+              <div className="pk-fields">
+                <div className="pk-field">
+                  <label>Buy-in $</label>
                   <input
                     value={r.buyIn}
                     onChange={(e) => update(r.id, { buyIn: e.target.value })}
                     disabled={!r.included}
                     inputMode="decimal"
                     placeholder="0"
-                    style={{ textAlign: "right", maxWidth: 90 }}
                   />
-                </td>
-                <td className="num">
+                </div>
+                <div className="pk-field">
+                  <label>Cash-out $</label>
                   <input
                     value={r.cashOut}
                     onChange={(e) => update(r.id, { cashOut: e.target.value })}
                     disabled={!r.included}
                     inputMode="decimal"
                     placeholder="0"
-                    style={{ textAlign: "right", maxWidth: 90 }}
                   />
-                </td>
-                <td className={`num ${r.included && net > 0 ? "pos" : r.included && net < 0 ? "neg" : ""}`}>
-                  {r.included ? formatCents(net) : "—"}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       <div className="muted" style={{ marginTop: 10 }}>
         {balanced ? (
@@ -181,7 +171,9 @@ export function PokerForm({
 
       {err && <div className="error">{err}</div>}
       <div style={{ marginTop: 14 }}>
-        <button disabled={!canSubmit}>{busy ? "…" : "Resolve game"}</button>
+        <button className="block" disabled={!canSubmit}>
+          {busy ? "…" : "Resolve game"}
+        </button>
       </div>
     </form>
   );

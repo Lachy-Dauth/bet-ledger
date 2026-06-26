@@ -67,7 +67,9 @@ export function AuthForm({
       />
       {err && <div className="error">{err}</div>}
       <div style={{ marginTop: 14 }}>
-        <button disabled={busy}>{busy ? "…" : mode === "login" ? "Log in" : "Create account"}</button>
+        <button className="block" disabled={busy}>
+          {busy ? "…" : mode === "login" ? "Log in" : "Create account"}
+        </button>
       </div>
     </form>
   );

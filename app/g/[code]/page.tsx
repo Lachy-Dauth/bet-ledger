@@ -379,7 +379,9 @@ function AddForm({
 
       {err && <div className="error">{err}</div>}
       <div style={{ marginTop: 12 }}>
-        <button disabled={busy}>{busy ? "…" : "Add to ledger"}</button>
+        <button className="block" disabled={busy}>
+          {busy ? "…" : "Add to ledger"}
+        </button>
       </div>
     </form>
   );
