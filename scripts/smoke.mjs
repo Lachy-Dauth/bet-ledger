@@ -65,37 +65,29 @@ async function main() {
   const noMember = await call(`/api/groups/${code}`, { token: undefined });
   check("unauth read rejected", noMember.status === 401);
 
-  console.log("Entries");
-  // Alice records a bet she lost to Bob -> auto-approved.
+  console.log("Entries (2-person group: quorum = 1, resolves on creation)");
+  // In a 2-person group the quorum is a single approval, so creating an entry
+  // (which counts as the creator's approval) resolves it immediately.
   const bet1 = await call(`/api/groups/${code}/entries`, {
     method: "POST",
     token: aTok,
     body: { type: "BET", payerId: aId, payeeId: bId, amountCents: 1000, description: "lost a wager" },
   });
-  check("self-payer bet auto-approves", bet1.data.status === "APPROVED");
+  check("own-loss bet resolves on creation", bet1.data.status === "APPROVED");
 
-  // Alice records a bet Bob lost -> pending, needs Bob.
   const bet2 = await call(`/api/groups/${code}/entries`, {
     method: "POST",
     token: aTok,
     body: { type: "BET", payerId: bId, payeeId: aId, amountCents: 500 },
   });
-  check("bet for other is pending", bet2.data.status === "PENDING");
+  check("bet for other resolves on creation (quorum 1)", bet2.data.status === "APPROVED");
 
-  // Alice can't approve Bob's pending bet.
-  const wrongApprove = await call(`/api/entries/${bet2.data.id}/approve`, { method: "POST", token: aTok });
-  check("non-payer cannot approve", wrongApprove.status === 403);
-
-  const approve = await call(`/api/entries/${bet2.data.id}/approve`, { method: "POST", token: bTok });
-  check("payer approves", approve.status === 200);
-
-  // A transfer: Bob owes Alice for food, Alice records it -> pending for Bob.
   const tr = await call(`/api/groups/${code}/entries`, {
     method: "POST",
     token: aTok,
     body: { type: "TRANSFER", payerId: bId, payeeId: aId, amountCents: 2000, description: "pizza" },
   });
-  await call(`/api/entries/${tr.data.id}/approve`, { method: "POST", token: bTok });
+  check("transfer resolves on creation (quorum 1)", tr.data.status === "APPROVED");
 
   console.log("Leaderboards");
   const view = await call(`/api/groups/${code}`, { token: aTok });
@@ -107,6 +99,46 @@ async function main() {
   // Overall adds the 2000 transfer (Bob -> Alice): Alice -500 +2000 = 1500 ; Bob -1500.
   check("overall board: Alice +1500", overall[alice] === 1500);
   check("overall board: Bob -1500", overall[bob] === -1500);
+
+  console.log("Quorum (3-person group: quorum = 2)");
+  const dan = "Dan_" + rnd();
+  const d = await call("/api/auth/signup", { method: "POST", body: { name: dan, pin: "2222" } });
+  const dTok = d.data.token;
+  const qg = (await call("/api/groups", { method: "POST", body: { name: "Trio" }, token: aTok })).data.group;
+  await call("/api/groups/join", { method: "POST", body: { code: qg.code }, token: bTok });
+  // Cara joins below via her own token; create her first.
+  const caraQ = "CaraQ_" + rnd();
+  const cq = await call("/api/auth/signup", { method: "POST", body: { name: caraQ, pin: "3333" } });
+  const cqTok = cq.data.token, cqId = cq.data.user.id;
+  await call("/api/groups/join", { method: "POST", body: { code: qg.code }, token: cqTok });
+  const view2 = await call(`/api/groups/${qg.code}`, { token: aTok });
+  check("approvalsNeeded is 2 for 3 members", view2.data.approvalsNeeded === 2);
+
+  // Alice records a bet Bob loses -> creator's vote = 1/2 -> PENDING.
+  const qb = await call(`/api/groups/${qg.code}/entries`, {
+    method: "POST", token: aTok,
+    body: { type: "BET", payerId: bId, payeeId: aId, amountCents: 700 },
+  });
+  check("bet pending at 1/2 in trio", qb.data.status === "PENDING");
+
+  // A non-member cannot approve.
+  const outsider = await call(`/api/entries/${qb.data.id}/approve`, { method: "POST", token: dTok });
+  check("non-member cannot approve (403)", outsider.status === 403);
+
+  // Cara (not a party) approving reaches the quorum -> APPROVED.
+  const q2 = await call(`/api/entries/${qb.data.id}/approve`, { method: "POST", token: cqTok });
+  check("second member approval resolves it", q2.status === 200 && q2.data.status === "APPROVED");
+
+  // Dispute path: Alice records a bet Cara loses; Cara (payer) disputes it.
+  const qd = await call(`/api/groups/${qg.code}/entries`, {
+    method: "POST", token: aTok,
+    body: { type: "BET", payerId: cqId, payeeId: aId, amountCents: 400 },
+  });
+  const disp = await call(`/api/entries/${qd.data.id}/dispute`, { method: "POST", token: cqTok });
+  check("payer can dispute", disp.status === 200);
+  const view3 = await call(`/api/groups/${qg.code}`, { token: aTok });
+  const disputed = view3.data.entries.find((e) => e.id === qd.data.id);
+  check("disputed entry not counted on board", disputed.status === "DISPUTED");
 
   console.log("Poker");
   // Fresh group with a third player so the settlement spans multiple payments.

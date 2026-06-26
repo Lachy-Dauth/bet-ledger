@@ -11,6 +11,7 @@ type GroupData = {
   group: { id: string; name: string; code: string };
   members: Member[];
   entries: EntryDTO[];
+  approvalsNeeded: number;
   boards: { bets: BoardRow[]; overall: BoardRow[] };
 };
 
@@ -165,10 +166,14 @@ function Ledger({
     return <div className="panel muted">No entries yet. Add a bet or transfer.</div>;
   }
 
+  const needed = data.approvalsNeeded;
+
   return (
     <div className="panel">
       {data.entries.map((e) => {
-        const canResolve = e.status === "PENDING" && e.payer.id === meId;
+        const isPending = e.status === "PENDING";
+        const canApprove = isPending && !e.approvedByMe;
+        const canDispute = isPending && e.payer.id === meId;
         return (
           <div key={e.id} className="entry">
             <div className="line">
@@ -183,16 +188,21 @@ function Ledger({
             {e.description && <div className="desc">“{e.description}”</div>}
             <div className="desc">
               {formatWhen(e.createdAt)} · added by {e.createdBy.name}
-              {e.status === "PENDING" && e.payer.id !== meId && ` · awaiting ${e.payer.name}'s approval`}
+              {isPending && ` · ${e.approvalCount}/${needed} approved`}
             </div>
-            {canResolve && (
+            {isPending && (canApprove || canDispute || e.approvedByMe) && (
               <div className="actions">
-                <button className="green small" onClick={() => resolve(e.id, "approve")}>
-                  Approve
-                </button>
-                <button className="red small" onClick={() => resolve(e.id, "dispute")}>
-                  Dispute
-                </button>
+                {canApprove && (
+                  <button className="green small" onClick={() => resolve(e.id, "approve")}>
+                    Approve
+                  </button>
+                )}
+                {e.approvedByMe && <span className="muted">You approved ✓</span>}
+                {canDispute && (
+                  <button className="red small" onClick={() => resolve(e.id, "dispute")}>
+                    Dispute
+                  </button>
+                )}
               </div>
             )}
           </div>

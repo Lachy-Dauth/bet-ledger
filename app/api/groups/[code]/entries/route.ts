@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getUser, requireMembership } from "@/lib/auth";
+import { approvalsNeeded } from "@/lib/ledger";
 
 // Record a bet or transfer. payer = loser/ower, payee = winner/owed.
-// If the creator is the payer (admitting it), it auto-approves; otherwise the
-// payer must approve or dispute it.
+// Creating it counts as the creator's approval; it then resolves once the
+// group quorum (approvalsNeeded) of members have approved.
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const user = await getUser(req);
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
@@ -29,14 +30,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
   }
 
   // Both parties must be members of this group.
-  const memberCount = await prisma.membership.count({
+  const partyCount = await prisma.membership.count({
     where: { groupId: group.id, userId: { in: [payerId, payeeId] } },
   });
-  if (memberCount !== 2) {
+  if (partyCount !== 2) {
     return NextResponse.json({ error: "payer and payee must both be group members" }, { status: 400 });
   }
 
-  const autoApprove = user.id === payerId;
+  // Creating an entry counts as the creator's approval. It resolves right away
+  // only if the group's quorum is a single approval (a 2-person group).
+  const memberCount = await prisma.membership.count({ where: { groupId: group.id } });
+  const needed = approvalsNeeded(memberCount);
+  const resolved = needed <= 1;
   const entry = await prisma.entry.create({
     data: {
       groupId: group.id,
@@ -46,8 +51,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
       payeeId,
       amountCents,
       description,
-      status: autoApprove ? "APPROVED" : "PENDING",
-      resolvedAt: autoApprove ? new Date() : null,
+      status: resolved ? "APPROVED" : "PENDING",
+      resolvedAt: resolved ? new Date() : null,
+      approvals: { create: { userId: user.id } },
     },
   });
 

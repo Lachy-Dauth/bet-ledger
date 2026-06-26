@@ -23,6 +23,7 @@ model User {
   createdEntries Entry[]      @relation("EntryCreator")
   entriesAsPayer Entry[]      @relation("EntryPayer")
   entriesAsPayee Entry[]      @relation("EntryPayee")
+  approvals      Approval[]
 }
 
 model Session {
@@ -74,10 +75,26 @@ model Entry {
   createdAt   DateTime @default(now())
   resolvedAt  DateTime?
 
-  group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdBy User  @relation("EntryCreator", fields: [createdById], references: [id])
-  payer     User  @relation("EntryPayer", fields: [payerId], references: [id])
-  payee     User  @relation("EntryPayee", fields: [payeeId], references: [id])
+  group     Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy User       @relation("EntryCreator", fields: [createdById], references: [id])
+  payer     User       @relation("EntryPayer", fields: [payerId], references: [id])
+  payee     User       @relation("EntryPayee", fields: [payeeId], references: [id])
+  approvals Approval[]
 
   @@index([groupId])
+}
+
+// A member's vote that an entry is valid. An entry resolves to APPROVED once
+// enough distinct members approve (see approvalsNeeded in lib/ledger.ts).
+model Approval {
+  id        String   @id @default(cuid())
+  entryId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  entry Entry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, userId])
+  @@index([entryId])
 }
