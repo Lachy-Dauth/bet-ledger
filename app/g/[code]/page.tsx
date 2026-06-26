@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, getSession, rememberGroup } from "@/lib/client";
-import { formatCents, type BoardRow, type EntryDTO, type Member } from "@/lib/ledger";
+import { formatCents, formatWhen, type BoardRow, type EntryDTO, type Member } from "@/lib/ledger";
+import { PnlChart } from "./PnlChart";
 
 type GroupData = {
   group: { id: string; name: string; code: string };
@@ -12,7 +13,7 @@ type GroupData = {
   boards: { bets: BoardRow[]; overall: BoardRow[] };
 };
 
-type Tab = "ledger" | "add" | "boards";
+type Tab = "ledger" | "add" | "boards" | "pnl";
 
 export default function GroupPage() {
   const router = useRouter();
@@ -101,6 +102,9 @@ export default function GroupPage() {
         <button className={tab === "boards" ? "active" : ""} onClick={() => setTab("boards")}>
           Leaderboards
         </button>
+        <button className={tab === "pnl" ? "active" : ""} onClick={() => setTab("pnl")}>
+          PnL Graph
+        </button>
       </div>
 
       {err && <div className="error">{err}</div>}
@@ -118,6 +122,7 @@ export default function GroupPage() {
         />
       )}
       {tab === "boards" && <Boards boards={data.boards} />}
+      {tab === "pnl" && <PnlChart members={data.members} entries={data.entries} />}
     </>
   );
 }
@@ -163,7 +168,7 @@ function Ledger({
             </div>
             {e.description && <div className="desc">“{e.description}”</div>}
             <div className="desc">
-              Added by {e.createdBy.name}
+              {formatWhen(e.createdAt)} · added by {e.createdBy.name}
               {e.status === "PENDING" && e.payer.id !== meId && ` · awaiting ${e.payer.name}'s approval`}
             </div>
             {canResolve && (
