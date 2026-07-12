@@ -1,0 +1,85 @@
+// Bet-ledger data model.
+// SQLite for dev; the schema is kept Postgres-compatible so deploying is a
+// matter of swapping the datasource provider + DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  pinHash   String
+  createdAt DateTime @default(now())
+
+  sessions       Session[]
+  memberships    Membership[]
+  createdGroups  Group[]      @relation("GroupCreator")
+  createdEntries Entry[]      @relation("EntryCreator")
+  entriesAsPayer Entry[]      @relation("EntryPayer")
+  entriesAsPayee Entry[]      @relation("EntryPayee")
+}
+
+model Session {
+  token     String   @id
+  userId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Group {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  createdById String
+  createdAt   DateTime @default(now())
+
+  createdBy   User         @relation("GroupCreator", fields: [createdById], references: [id])
+  memberships Membership[]
+  entries     Entry[]
+}
+
+model Membership {
+  id       String   @id @default(cuid())
+  userId   String
+  groupId  String
+  joinedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([groupId])
+}
+
+// A single Entry models both a BET (winner vs loser) and a TRANSFER (e.g. food).
+// payer = the one who owes (loser); payee = the one owed (winner).
+// Entries are APPROVED by default and count immediately. A party can DISPUTE
+// one; the group creator then resolves it back to APPROVED or to VOIDED.
+model Entry {
+  id          String   @id @default(cuid())
+  groupId     String
+  type        String // "BET" | "TRANSFER"
+  createdById String
+  payerId     String
+  payeeId     String
+  amountCents Int
+  description String   @default("")
+  status      String   @default("APPROVED") // "APPROVED" | "DISPUTED" | "VOIDED"
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+
+  group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy User  @relation("EntryCreator", fields: [createdById], references: [id])
+  payer     User  @relation("EntryPayer", fields: [payerId], references: [id])
+  payee     User  @relation("EntryPayee", fields: [payeeId], references: [id])
+
+  @@index([groupId])
+}
